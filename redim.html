@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>SpyOS 5.0 // The Gauntlet</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
+        :root {
+            --glow: #00f2ff;
+            --bg: #02050a;
+            --alert: #ff0055;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--glow);
+            font-family: 'Share Tech Mono', monospace;
+            height: 100vh;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            perspective: 1000px;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        #scene {
+            width: 800px;
+            height: 500px;
+            transform-style: preserve-3d;
+            position: relative;
+        }
+
+        #hud {
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 242, 255, 0.05);
+            border: 1px solid rgba(0, 242, 255, 0.4);
+            backdrop-filter: blur(5px);
+            padding: 30px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            box-shadow: 0 0 30px rgba(0, 242, 255, 0.1);
+            transform: translateZ(30px);
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--glow);
+            padding-bottom: 10px;
+        }
+
+        .stats {
+            display: flex;
+            gap: 20px;
+            font-size: 0.9rem;
+        }
+
+        #scenario-box {
+            flex-grow: 1;
+            background: rgba(0, 0, 0, 0.6);
+            border: 1px dashed var(--glow);
+            padding: 20px;
+            font-size: 1.2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+        }
+
+        .btn-container {
+            display: flex;
+            gap: 10px;
+        }
+
+        button {
+            flex: 1;
+            background: rgba(0, 242, 255, 0.1);
+            border: 1px solid var(--glow);
+            color: var(--glow);
+            padding: 15px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 1rem;
+            transition: 0.2s;
+            text-transform: uppercase;
+        }
+
+        button:hover {
+            background: var(--glow);
+            color: #000;
+        }
+
+        /* Progress Bar */
+        .prog-container {
+            width: 100%;
+            height: 5px;
+            background: #222;
+            margin-top: 10px;
+        }
+
+        #prog-fill {
+            height: 100%;
+            width: 0%;
+            background: var(--glow);
+            transition: width 0.3s;
+        }
+
+        .scanline {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%);
+            background-size: 100% 4px;
+            pointer-events: none;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="scene">
+        <div>you have 150HP, and 500 Suspicion until you fail.</div><br><br>
+        <div>UNIT 121 // DEEP INFILTRATION</div>
+        <div style="margin-left: 670px; margin-top: -20px;">FLOOR: <span id="floor-num">1</span>/50</div>
+        <div style="margin-bottom: 30px;">HP: <span id="hp-val">150</span>%</div>
+        <div>SUSPICION: <span id="susp-val">0</span>%</div><br>
+        <div class="scanline"></div>
+        <div id="hud">
+            <div>you have 150HP, and 500 Suspicion until you fail.</div>
+            <div class="header">
+                <div>UNIT 121 // DEEP INFILTRATION</div>
+                <div>FLOOR: <span id="floor-num">1</span>/50</div>
+            </div>
+
+            <div class="stats">
+                <div>HP: <span id="hp-val">150</span>%</div>
+                <div>SUSPICION: <span id="susp-val">0</span>%</div>
+            </div>
+
+            <div class="prog-container">
+                <div id="prog-fill"></div>
+            </div>
+
+            <div id="scenario-box">Loading neural simulation...</div>
+
+            <div class="btn-container">
+                <button id="btn-a" onclick="makeChoice('a')">OPTION A</button>
+                <button id="btn-b" onclick="makeChoice('b')">OPTION B</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 3D Parallax Effect
+        const scene = document.getElementById('scene');
+        document.addEventListener('mousemove', (e) => {
+            let xAxis = (window.innerWidth / 2 - e.pageX) / 40;
+            let yAxis = (window.innerHeight / 2 - e.pageY) / 40;
+            scene.style.transform = `rotateY(${xAxis}deg) rotateX(${yAxis}deg)`;
+        });
+
+        // Player Stats
+        let hp = 150;
+        let susp = 0;
+        let currentLevel = 0;
+
+        // The 50-Question Database Engine
+        // Format: q = Question, a/b = Button Text, s1/s2 = Suspicion cost, h1/h2 = HP cost
+        const gauntlet = [
+            { q: "A metal detector blocks the lobby.", a: "Walk through confidently", b: "Bypass via maintenance door", s1: 10, h1: 0, s2: 0, h2: 0 },
+            { q: "A guard asks for your employee ID.", a: "Show forged ID", b: "Pretend you lost it", s1: 5, h1: 0, s2: 15, h2: 0 },
+            { q: "A security dog sniffs your leg.", a: "Stand perfectly still", b: "Toss it a treat", s1: 0, h1: 0, s2: 10, h2: 0 },
+            { q: "The elevator requires a keycard.", a: "Tailgate someone inside", b: "Hack the panel", s1: 10, h1: 0, s2: 5, h2: 0 },
+            { q: "Someone calls out your fake name.", a: "Ignore them", b: "Turn and smile", s1: 15, h1: 0, s2: 0, h2: 0 },
+            { q: "A CCTV camera pans toward you.", a: "Hide in blind spot", b: "Look down at phone", s1: 0, h1: 0, s2: 5, h2: 0 },
+            { q: "You step on a squeaky floorboard.", a: "Freeze", b: "Keep walking naturally", s1: 5, h1: 0, s2: 0, h2: 0 },
+            { q: "A janitor blocks the hallway.", a: "Excuse yourself", b: "Slip past silently", s1: 0, h1: 0, s2: 5, h2: 0 },
+            { q: "You find a locked server room.", a: "Pick the lock", b: "Use thermal lance", s1: 5, h1: 0, s2: 20, h2: 0 },
+            { q: "A guard is sleeping at his desk.", a: "Sneak past", b: "Steal his keycard", s1: 0, h1: 0, s2: 15, h2: 0 },
+            { q: "Laser grid detects movement.", a: "Acrobatic dodge", b: "Use smoke to reveal beams", s1: 0, h1: 10, s2: 10, h2: 0 },
+            { q: "Your earpiece statics loudly.", a: "Mute it quickly", b: "Cough to cover sound", s1: 0, h1: 0, s2: 5, h2: 0 },
+            { q: "A drone patrols the corridor.", a: "Hack its frequency", b: "Hide in a locker", s1: 10, h1: 0, s2: 0, h2: 0 },
+            { q: "You smell gas in the vent.", a: "Hold your breath", b: "Climb out quickly", s1: 0, h1: 15, s2: 10, h2: 0 },
+            { q: "A VIP drops a flash drive.", a: "Steal it", b: "Return it for trust", s1: 20, h1: 0, s2: -10, h2: 0 },
+            { q: "Biometric scanner on the vault.", a: "Use fake fingerprint", b: "Bypass wiring", s1: 5, h1: 0, s2: 15, h2: 0 },
+            { q: "A tripwire is in the dark.", a: "Step over it", b: "Disarm it", s1: 0, h1: 0, s2: 10, h2: 0 },
+            { q: "Two guards are chatting nearby.", a: "Throw a distraction", b: "Wait them out", s1: 10, h1: 0, s2: 0, h2: 0 },
+            { q: "Your forged badge expires in 1 min.", a: "Sprint to exit", b: "Walk calmly", s1: 20, h1: 0, s2: 5, h2: 0 },
+            { q: "You are cornered by a patrol.", a: "Fight", b: "Surrender and break out later", s1: 30, h1: 20, s2: 50, h2: 0 },
+            { q: "A window cleaner spots you.", a: "Flash a fake badge", b: "Threaten him", s1: 5, h1: 0, s2: 25, h2: 0 },
+            { q: "The fire alarm goes off.", a: "Blend with the crowd", b: "Use the chaos to hack", s1: 0, h1: 0, s2: 15, h2: 0 },
+            { q: "You find a disguise (Chef).", a: "Put it on", b: "Ignore it", s1: -10, h1: 0, s2: 0, h2: 0 },
+            { q: "A chef asks you to chop onions.", a: "Do it perfectly", b: "Refuse", s1: 0, h1: 0, s2: 15, h2: 0 },
+            { q: "Poison the target's drink?", a: "Yes", b: "No, too risky", s1: 20, h1: 0, s2: 0, h2: 0 },
+            { q: "Target is choking.", a: "Walk away", b: "Pretend to help", s1: 10, h1: 0, s2: -5, h2: 0 },
+            { q: "Guards lock down the floor.", a: "Climb the elevator shaft", b: "Hide in ceiling", s1: 15, h1: 10, s2: 5, h2: 0 },
+            { q: "Elevator cable snaps.", a: "Jump to ledge", b: "Brace for impact", s1: 0, h1: 20, s2: 0, h1: 40 },
+            { q: "You are bleeding.", a: "Use medkit", b: "Push through the pain", s1: 0, h1: -20, s2: 10, h2: 10 },
+            { q: "You find the server mainframe.", a: "Plug in USB", b: "Type code manually", s1: 15, h1: 0, s2: 5, h2: 0 },
+            { q: "Firewall detected.", a: "Brute force it", b: "Reroute connection", s1: 20, h1: 0, s2: 5, h2: 0 },
+            { q: "Download takes 3 minutes.", a: "Barricade door", b: "Hide and watch", s1: 15, h1: 0, s2: 0, h2: 0 },
+            { q: "Guard tries to open door.", a: "Hold it shut", b: "Shoot through it", s1: 10, h1: 0, s2: 40, h2: 0 },
+            { q: "Download complete.", a: "Smash server", b: "Leave no trace", s1: 30, h1: 0, s2: 0, h2: 0 },
+            { q: "Helicopter spotlights the window.", a: "Duck", b: "Run across room", s1: 0, h1: 0, s2: 25, h2: 0 },
+            { q: "You need to cross a narrow beam.", a: "Crawl", b: "Walk fast", s1: 0, h1: 0, s2: 10, h1: 10 },
+            { q: "A pigeon startles you.", a: "Stumble", b: "Catch it", s1: 10, h1: 5, s2: 0, h2: 0 },
+            { q: "Sniper laser on your chest.", a: "Dive for cover", b: "Deploy smoke", s1: 20, h1: 10, s2: 10, h2: 0 },
+            { q: "You reach the roof edge.", a: "Zip-line down", b: "Base jump", s1: 10, h1: 0, s2: 30, h2: 5 },
+            { q: "Zip-line gets stuck.", a: "Cut it and drop", b: "Shimmy across", s1: 20, h1: 15, s2: 5, h2: 0 },
+            { q: "You land in an alley.", a: "Stay in shadows", b: "Run to street", s1: 0, h1: 0, s2: 15, h2: 0 },
+            { q: "Police car drives by.", a: "Act drunk", b: "Hide in dumpster", s1: 5, h1: 0, s2: 0, h2: 5 },
+            { q: "Dumpster smells awful.", a: "Vomit", b: "Hold it in", s1: 10, h1: 0, s2: 0, h2: 0 },
+            { q: "You reach the subway.", a: "Vault turnstile", b: "Buy a ticket", s1: 15, h1: 0, s2: 0, h2: 0 },
+            { q: "Train is approaching.", a: "Sprint for it", b: "Wait for next one", s1: 10, h1: 0, s2: -5, h2: 0 },
+            { q: "A passenger stares at you.", a: "Stare back", b: "Read a newspaper", s1: 10, h1: 0, s2: 0, h2: 0 },
+            { q: "Station is swarming with cops.", a: "Exit through tunnels", b: "Walk through boldly", s1: 5, h1: 0, s2: 30, h2: 0 },
+            { q: "Tunnel is flooded.", a: "Wade through", b: "Climb pipes", s1: 0, h1: 10, s2: 0, h2: 0 },
+            { q: "You see the extraction van.", a: "Approach slowly", b: "Run to it", s1: 0, h1: 0, s2: 10, h2: 0 },
+            { q: "Handler asks for the drive.", a: "Hand it over", b: "Demand payment first", s1: 0, h1: 0, s2: 20, h2: 0 }
+        ];
+
+        function loadLevel() {
+            if (hp <= 0) return gameOver("K.I.A. You sustained too much damage.");
+            if (susp >= 500) return gameOver("CAPTURED. South Korean Intelligence got you.");
+            if (currentLevel >= gauntlet.length) return victory();
+
+            const level = gauntlet[currentLevel];
+            document.getElementById('floor-num').innerText = currentLevel + 1;
+            document.getElementById('scenario-box').innerText = level.q;
+            document.getElementById('btn-a').innerText = level.a;
+            document.getElementById('btn-b').innerText = level.b;
+
+            // Update Progress Bar
+            document.getElementById('prog-fill').style.width = ((currentLevel / 50) * 100) + "%";
+        }
+
+        function makeChoice(choice) {
+            const level = gauntlet[currentLevel];
+
+            if (choice === 'a') {
+                susp += level.s1;
+                hp -= level.h1;
+            } else {
+                susp += level.s2;
+                hp -= level.h2;
+            }
+
+            // Keep stats in bounds
+            if (susp < 0) susp = 0;
+            if (hp > 150) hp = 150;
+
+            document.getElementById('hp-val').innerText = hp;
+            document.getElementById('susp-val').innerText = susp;
+
+            // Change color if in danger
+            document.getElementById('hud').style.borderColor = susp > 75 ? "#ff0055" : "rgba(0, 242, 255, 0.4)";
+
+            currentLevel++;
+            loadLevel();
+        }
+
+        function gameOver(msg) {
+            document.getElementById('scenario-box').innerHTML = `<span style="color:var(--alert)">MISSION FAILED</span><br><br>${msg}`;
+            document.querySelector('.btn-container').innerHTML = `<button onclick="location.reload()">RETRY GAUNTLET</button>`;
+        }
+
+        function victory() {
+            document.getElementById('scenario-box').innerHTML = `<span style="color:gold">MISSION ACCOMPLISHED</span><br><br>You survived the gauntlet and extracted successfully.`;
+            document.querySelector('.btn-container').innerHTML = `<button onclick="location.reload()">PLAY AGAIN</button>`;
+        }
+
+        // Start game
+        loadLevel();
+    </script>
+</body>
+
+</html>
